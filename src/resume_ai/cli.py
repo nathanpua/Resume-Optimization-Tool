@@ -16,6 +16,7 @@ def main():
     parser.add_argument("--out", dest="out_dir", default="out", help="Output directory")
     parser.add_argument("--strategy", dest="strategy", default="balanced", choices=["conservative", "balanced", "bold"], help="Optimization strategy")
     parser.add_argument("--pages", dest="pages", default="auto", choices=["auto", "one", "two"], help="Target page count policy")
+    parser.add_argument("--availability", dest="availability", default=None, help="Availability line to show in header; omitted if not provided")
 
     args = parser.parse_args()
 
@@ -30,7 +31,7 @@ def main():
         job_input=args.jd_text or args.jd_url or "",
         resume_path=args.resume_path or "",
         out_dir=str(out_dir),
-        preferences={"strategy": args.strategy, "pages": args.pages},
+        preferences={"strategy": args.strategy, "pages": args.pages, "availability": args.availability},
     )
 
     report_path = out_dir / "report.json"

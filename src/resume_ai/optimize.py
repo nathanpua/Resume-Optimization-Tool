@@ -1,6 +1,10 @@
 from pathlib import Path
 from typing import Any, Dict
 from tools.latex import compile_pdf
+from src.resume_ai.env import load_dotenv
+from src.resume_ai.lm_google import GoogleLMClient
+from src.resume_ai.tex_edit import extract_itemize_blocks, replace_itemize_block, set_header_availability
+from tools.jd_ingest import fetch_job_listing
 
 
 def _write_nathan_style(tex_path: Path, context: Dict[str, Any]) -> None:
