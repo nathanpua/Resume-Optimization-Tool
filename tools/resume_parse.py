@@ -48,9 +48,9 @@ class Resume:
 
 
 def parse_resume_document(file_path: Optional[str]) -> Resume:
-    """MVP: placeholder parser that returns an empty structured resume if no file.
+    """MVP: PDF-only parser stub. DOCX and others are not supported.
 
-    Later: implement PDF/DOCX parsing into structured JSON.
+    Later: implement real PDF parsing into structured JSON.
     """
     if not file_path:
         return Resume(contact=Contact())
@@ -59,5 +59,9 @@ def parse_resume_document(file_path: Optional[str]) -> Resume:
     if not path.exists():
         return Resume(contact=Contact())
 
-    # MVP: do not attempt to parse; return a minimal stub
+    if path.suffix.lower() != ".pdf":
+        # Enforce PDF-only input per requirements
+        return Resume(contact=Contact())
+
+    # TODO: Implement PDF parsing (pypdf/pdfminer)
     return Resume(contact=Contact())

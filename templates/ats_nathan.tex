@@ -1,0 +1,46 @@
+% Nathan-style ATS-friendly resume template with placeholders
+\documentclass[10pt]{article}
+\usepackage[letterpaper, left=0.5in, right=0.5in, top=0.5in, bottom=0.5in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{parskip}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlength{\baselineskip}{11pt}
+\hypersetup{colorlinks=true, linkcolor=black, filecolor=black, urlcolor=black}
+\titleformat{\section}{\large\bfseries\uppercase}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\bfseries}{}{0em}{}
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+\titlespacing*{\subsection}{0pt}{4pt}{2pt}
+\setlist{nosep, leftmargin=1em, itemsep=0pt, parsep=0pt, topsep=0pt}
+
+% Commands
+\newcommand{\resumeheader}[5]{\begin{center}{\Large\bfseries #1}\\[0.1em]#2 \textbar\ #3 \textbar\ \href{mailto:#4}{#4} \textbar\ \href{#5}{#5}\end{center}\vspace{0.3em}}
+\newcommand{\resumeentry}[4]{\subsection{#1 \hfill #3}\textit{#2}\\[-0.1em]#4\vspace{0.2em}}
+\newcommand{\educationentry}[4]{\subsection{#1 \hfill #3}\textit{#2}\\[-0.1em]#4\vspace{0.2em}}
+\newcommand{\projectentry}[2]{\subsection{#1}#2\vspace{0.2em}}
+
+\begin{document}
+\resumeheader{<<NAME>>}{<<LOCATION>>}{<<AVAILABILITY>>}{<<EMAIL>>}{<<LINK>>}
+
+\section{Education}
+<<EDUCATION_BLOCK>>
+
+\section{Experience}
+<<EXPERIENCE_BLOCK>>
+
+\section{Projects}
+<<PROJECTS_BLOCK>>
+
+\section{Technical Skills}
+<<SKILLS_BLOCK>>
+
+\section{Certifications \& Achievements}
+<<CERTS_BLOCK>>
+\end{document}
