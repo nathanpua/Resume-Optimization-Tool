@@ -11,6 +11,7 @@ def main():
     )
     parser.add_argument("optimize", nargs="?", default=None, help="optimize command")
     parser.add_argument("--jd-url", dest="jd_url", default=None, help="Job description URL")
+    parser.add_argument("--input-tex", dest="input_tex", default=None, help="Path to input TeX template to preserve and edit")
     parser.add_argument("--jd-text", dest="jd_text", default=None, help="Job description raw text")
     parser.add_argument("--resume", dest="resume_path", required=False, help="Path to resume (PDF only)")
     parser.add_argument("--out", dest="out_dir", default="out", help="Output directory")
@@ -28,10 +29,16 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     result = optimize_resume(
-        job_input=args.jd_text or args.jd_url or "",
+        job_input_text=args.jd_text or "",
+        job_input_url=args.jd_url or "",
         resume_path=args.resume_path or "",
         out_dir=str(out_dir),
-        preferences={"strategy": args.strategy, "pages": args.pages, "availability": args.availability},
+        preferences={
+            "strategy": args.strategy,
+            "pages": args.pages,
+            "availability": args.availability,
+            "input_tex": args.input_tex,
+        },
     )
 
     report_path = out_dir / "report.json"
