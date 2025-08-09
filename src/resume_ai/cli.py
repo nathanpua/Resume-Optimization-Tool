@@ -2,6 +2,7 @@ import argparse
 import json
 from pathlib import Path
 from .optimize import optimize_resume
+from tools.jd_ingest import fetch_job_listing, derive_job_name
 
 
 def main():
@@ -13,6 +14,8 @@ def main():
     parser.add_argument("--jd-url", dest="jd_url", default=None, help="Job description URL")
     parser.add_argument("--input-tex", dest="input_tex", default=None, help="Path to input TeX template to preserve and edit")
     parser.add_argument("--jd-text", dest="jd_text", default=None, help="Job description raw text")
+    parser.add_argument("--job-name", dest="job_name", default=None, help="Folder name for outputs (defaults to sanitized job text)")
+    parser.add_argument("--model", dest="model", default=None, help="LLM model id (overrides GOOGLE_MODEL/OPENAI_MODEL), e.g. 'gemini-2.0-flash' or 'gpt-5'")
     parser.add_argument("--resume", dest="resume_path", required=False, help="Path to resume (PDF only)")
     parser.add_argument("--out", dest="out_dir", default="out", help="Output directory")
     parser.add_argument("--strategy", dest="strategy", default="balanced", choices=["conservative", "balanced", "bold"], help="Optimization strategy")
@@ -25,7 +28,15 @@ def main():
         parser.print_help()
         return 0
 
-    out_dir = Path(args.out_dir)
+    # Compute output directory -> out/<job-name>
+    # If no explicit job_name, derive from the actual JD contents (title/company) when possible
+    base_out_dir = Path(args.out_dir)
+    job_name = args.job_name
+    if not job_name:
+        # Fetch JD to extract a meaningful name
+        jd = fetch_job_listing(url=args.jd_url, raw_text=args.jd_text)
+        job_name = derive_job_name(jd.text or "", url=jd.url)
+    out_dir = base_out_dir / (job_name or "job")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     result = optimize_resume(
@@ -38,6 +49,8 @@ def main():
             "pages": args.pages,
             "availability": args.availability,
             "input_tex": args.input_tex,
+            "job_name": job_name,
+            "model": args.model,
         },
     )
 

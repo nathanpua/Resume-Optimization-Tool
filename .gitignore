@@ -1,0 +1,11 @@
+# Environment variables
+.env
+
+# Generated outputs (resumes, PDFs, reports)
+out/
+
+# Root-level resume files
+resume.*
+Nathan_Pua_Resume.tex
+
+

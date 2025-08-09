@@ -1,11 +1,19 @@
 from __future__ import annotations
 from pathlib import Path
+import os
 from typing import Any, Dict, List
 
 from tools.latex import compile_pdf
 from .env import load_dotenv
 from .lm_google import GoogleLMClient
-from .tex_edit import extract_itemize_blocks, replace_itemize_block, set_header_availability
+from .lm_openai import OpenAIClient
+from .tex_edit import (
+    extract_itemize_blocks,
+    replace_itemize_block,
+    set_header_availability,
+    escape_latex_text,
+    sanitize_llm_bullet,
+)
 from .coverage import compute_keyword_coverage
 from tools.jd_ingest import fetch_job_listing
 
@@ -28,8 +36,19 @@ def optimize_resume(
 
     # Load environment and set up LLM
     load_dotenv()
-    model_name = (preferences or {}).get("model") or "gemini-2.0-flash"
-    llm = GoogleLMClient(model=model_name)
+    # Model selection rules:
+    # - If preferences.model is provided, use it
+    # - Else prefer env GOOGLE_MODEL or OPENAI_MODEL, default to gemini-2.0-flash
+    requested_model = (preferences or {}).get("model")
+    if not requested_model:
+        requested_model = os.getenv("GOOGLE_MODEL") or os.getenv("OPENAI_MODEL") or "gemini-2.0-flash"
+
+    # Choose provider by model naming: use OpenAI when model contains 'gpt', else Google
+    use_openai = "gpt" in (requested_model or "").lower()
+    if use_openai:
+        llm = OpenAIClient(model=requested_model)
+    else:
+        llm = GoogleLMClient(model=requested_model)
 
     # Determine base TeX input
     input_tex_path = (preferences or {}).get("input_tex")
@@ -63,8 +82,21 @@ def optimize_resume(
     # Extract bullets
     blocks = extract_itemize_blocks(before_tex)
 
-    # Extract keywords and plan
-    keywords = llm.extract_keywords(jd_text or "")
+    # Extract keywords and plan (clip JD to avoid oversized payloads)
+    jd_text_for_llm = (jd_text or "")
+    if len(jd_text_for_llm) > 20000:
+        jd_text_for_llm = jd_text_for_llm[:20000]
+    keywords = llm.extract_keywords(jd_text_for_llm)
+
+    # Fallback: if OpenAI returned an error and no keywords, try a safer model
+    if use_openai and not ((keywords.get("required") or []) or (keywords.get("preferred") or [])):
+        last_status = getattr(llm, "last_status", "")
+        if last_status == "error":
+            fallback_model = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4o-mini")
+            if fallback_model and fallback_model != requested_model:
+                llm = OpenAIClient(model=fallback_model)
+                requested_model = fallback_model
+                keywords = llm.extract_keywords(jd_text_for_llm)
     target_keywords: List[str] = (keywords.get("required", []) + keywords.get("preferred", []))[:40]
 
     # Rewrite bullets per block
@@ -78,6 +110,8 @@ def optimize_resume(
             rewritten = rewritten + items[len(rewritten) :]
         elif len(rewritten) > len(items):
             rewritten = rewritten[: len(items)]
+        # Sanitize placeholders like <SQL> or <> then escape LaTeX specials
+        rewritten = [escape_latex_text(sanitize_llm_bullet(s)) for s in rewritten]
         new_bullets_per_block.append(rewritten)
         old_text = " \n".join(items).lower()
         new_text = " \n".join(rewritten).lower()
@@ -101,12 +135,25 @@ def optimize_resume(
     tex_path.write_text(after_tex, encoding="utf-8")
     pdf_path = compile_pdf(tex_path)
 
+    # LLM diagnostics for report
+    llm_provider = "openai" if use_openai else "google"
+    llm_configured = bool(os.getenv("OPENAI_API_KEY")) if use_openai else bool(os.getenv("GOOGLE_API_KEY"))
+    llm_stats = {
+        "provider": llm_provider,
+        "model": requested_model,
+        "configured": llm_configured,
+        "calls_made": getattr(llm, "calls_made", None),
+        "last_status": getattr(llm, "last_status", None),
+        "last_error": getattr(llm, "last_error", None),
+    }
+
     return {
         "outputs": {"tex": str(tex_path), "pdf": pdf_path},
         "preferences": preferences,
         "notes": "Edited bullets only; preserved base formatting.",
         "job_input_present": bool(job_input_text or job_input_url),
         "resume_present": bool(resume_path),
+        "llm": llm_stats,
         "coverage": {
             "required_present": coverage.required_present,
             "required_missing": coverage.required_missing,

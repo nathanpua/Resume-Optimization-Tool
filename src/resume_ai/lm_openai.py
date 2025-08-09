@@ -8,20 +8,20 @@ from typing import Any, Dict, List, Optional
 from . import prompts
 
 
-class GoogleLMClient:
-    """REST client for Google Generative Language API (Gemini).
+class OpenAIClient:
+    """Minimal REST client for OpenAI Chat Completions.
 
-    Uses API key auth via `GOOGLE_API_KEY`. Targets `gemini-2.0-flash`.
-    On any error, returns safe fallbacks to keep pipeline running.
+    - Auth via `OPENAI_API_KEY`
+    - Uses `model` passed at init (e.g., `gpt-5`, `gpt-4o-mini`)
+    - On any error or missing config, returns safe fallbacks
     """
 
-    def __init__(self, model: str = "gemini-2.0-flash") -> None:
-        self.api_key = os.getenv("GOOGLE_API_KEY", "")
+    def __init__(self, model: str = "gpt-4o-mini") -> None:
+        self.api_key = os.getenv("OPENAI_API_KEY", "")
         self.model = model
-        self.endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
-        # HTTP timeout (seconds), adjustable via env
+        self.endpoint = "https://api.openai.com/v1/chat/completions"
         try:
-            self.request_timeout_s = float(os.getenv("GOOGLE_HTTP_TIMEOUT", "15"))
+            self.request_timeout_s = float(os.getenv("OPENAI_HTTP_TIMEOUT", "15"))
         except ValueError:
             self.request_timeout_s = 15.0
         self.calls_made: int = 0
@@ -32,12 +32,14 @@ class GoogleLMClient:
         return bool(self.api_key)
 
     def _post(self, body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """POST body and return parsed JSON payload or None on error (with timeout)."""
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
             self.endpoint,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
             method="POST",
         )
         try:
@@ -57,62 +59,46 @@ class GoogleLMClient:
         if not self._is_configured():
             return ""
         body = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}],
-                }
-            ]
+            "model": self.model,
+            "messages": [
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
         }
         payload = self._post(body)
         if payload is None:
             return ""
-
-        # Extract text from first candidate
         try:
-            candidates = payload.get("candidates", [])
-            parts = candidates[0]["content"]["parts"]
-            texts = [p.get("text", "") for p in parts]
-            return "\n".join([t for t in texts if t])
+            choices = payload.get("choices", [])
+            content = choices[0]["message"]["content"]
+            return str(content or "")
         except Exception:
             return ""
 
     def _call_json(self, prompt: str) -> str:
-        """Call the API asking explicitly for JSON, return raw text (expected JSON string).
-
-        Some models wrap JSON in prose or code fences; callers should still be robust in parsing.
-        """
         if not self._is_configured():
             return ""
         body = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}],
-                }
+            "model": self.model,
+            "messages": [
+                {"role": "user", "content": prompt},
             ],
-            "generationConfig": {
-                "response_mime_type": "application/json"
-            },
+            "temperature": 0.0,
+            # Ask for valid JSON object; supported by newer GPT models
+            "response_format": {"type": "json_object"},
         }
         payload = self._post(body)
         if payload is None:
             return ""
-
         try:
-            candidates = payload.get("candidates", [])
-            parts = candidates[0]["content"]["parts"]
-            texts = [p.get("text", "") for p in parts]
-            return "\n".join([t for t in texts if t])
+            choices = payload.get("choices", [])
+            content = choices[0]["message"]["content"]
+            return str(content or "")
         except Exception:
             return ""
 
     @staticmethod
     def _render_prompt(template: str, **values: str) -> str:
-        """Safely substitute known placeholders without touching other braces.
-
-        This avoids str.format() conflicts with JSON braces in the templates.
-        """
         rendered = template
         for key, val in values.items():
             rendered = rendered.replace("{" + key + "}", val or "")
@@ -120,21 +106,11 @@ class GoogleLMClient:
 
     @staticmethod
     def _extract_json_block(text: str) -> str:
-        """Best-effort: extract a JSON object/array from arbitrary text.
-
-        - Strips common Markdown code fences
-        - Finds the first top-level JSON object/array by brace/bracket matching
-        """
         if not text:
             return ""
         s = text.strip()
-        # Strip triple backticks if present
-        if s.startswith("```"):
-            s = s.strip('`')
-            # Remove possible language hint like json\n
-            if s.lower().startswith("json"):
-                s = s[4:].lstrip()
-        # Find first '{' or '[' and attempt to balance braces/brackets
+        # No special block handling needed here; reuse same logic as Google client
+        # to be robust if the model ignores response_format
         start_candidates = [i for i, ch in enumerate(s) if ch in "[{"]
         if not start_candidates:
             return ""
@@ -151,14 +127,12 @@ class GoogleLMClient:
                 if (open_ch, ch) not in (("[", "]"), ("{", "}")):
                     return ""
                 if not stack:
-                    # Found a balanced block
                     return s[start : i + 1]
         return ""
 
     def extract_keywords(self, jd_text: str) -> Dict[str, List[str]]:
         prompt = self._render_prompt(prompts.KEYWORD_EXTRACTION_PROMPT, jd_text=jd_text or "")
         text = self._call_json(prompt) or self._call(prompt)
-        # Try parse directly; if fails, try extracting a JSON block
         try:
             data = json.loads(text)
         except Exception:
@@ -174,12 +148,14 @@ class GoogleLMClient:
         domains: List[str] = []
 
         if isinstance(data, dict):
+            # If legacy keys exist, use them directly
             legacy_required = data.get("required")
             legacy_preferred = data.get("preferred")
             if isinstance(legacy_required, list) or isinstance(legacy_preferred, list):
                 required = list(map(str, legacy_required or []))
                 preferred = list(map(str, legacy_preferred or []))
             else:
+                # Map category-based output to expected buckets
                 core_skills = data.get("core_skills", [])
                 technical_skills = data.get("technical_skills", [])
                 soft_skills = data.get("soft_skills", [])
@@ -187,6 +163,7 @@ class GoogleLMClient:
                 tools_platforms = data.get("tools_platforms", [])
                 methodologies = data.get("methodologies", [])
 
+                # Treat hard/role-specific items as required; soft skills as preferred
                 required = list(map(str, (
                     (core_skills or [])
                     + (technical_skills or [])
@@ -196,6 +173,7 @@ class GoogleLMClient:
                 )))
                 preferred = list(map(str, (soft_skills or [])))
 
+            # Optional auxiliary fields
             verbs = list(map(str, data.get("verbs", [])))
             domains = list(map(str, data.get("domains", [])))
 
@@ -238,7 +216,6 @@ class GoogleLMClient:
             bullets = data.get("bullets", [])
         if bullets:
             return [str(b).strip() for b in bullets if str(b).strip()]
-        # Safe fallback to original items
         items = experience_item.get("bullets", []) if isinstance(experience_item, dict) else []
         return [str(it) for it in items]
 
@@ -246,3 +223,5 @@ class GoogleLMClient:
         prompt = self._render_prompt(prompts.SUMMARY_PROMPT, role=role or "", company=company or "", keywords=", ".join(keywords or []))
         text = self._call(prompt)
         return text.strip() if text else ""
+
+

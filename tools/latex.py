@@ -10,8 +10,9 @@ def compile_pdf(tex_path: str | Path) -> Optional[str]:
     """
     tex_path = Path(tex_path)
     pdf_path = tex_path.with_suffix(".pdf")
+    abs_tex_path = tex_path.resolve()
 
-    # Try latexmk (preferred)
+    # Try latexmk (preferred). Ensure all artifacts are written next to the tex file.
     try:
         result = subprocess.run(
             [
@@ -20,12 +21,14 @@ def compile_pdf(tex_path: str | Path) -> Optional[str]:
                 "-interaction=nonstopmode",
                 "-halt-on-error",
                 "-silent",
-                str(tex_path),
+                "-outdir=.",
+                abs_tex_path.name,
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=120,
             check=False,
+            cwd=str(abs_tex_path.parent),
         )
         if result.returncode == 0 and pdf_path.exists():
             return str(pdf_path)
@@ -34,7 +37,7 @@ def compile_pdf(tex_path: str | Path) -> Optional[str]:
     except subprocess.TimeoutExpired:
         pass
 
-    # Fallback: pdflatex (two runs)
+    # Fallback: pdflatex (two runs). Also constrain output directory.
     for _ in range(2):
         try:
             result = subprocess.run(
@@ -42,13 +45,14 @@ def compile_pdf(tex_path: str | Path) -> Optional[str]:
                     "pdflatex",
                     "-interaction=nonstopmode",
                     "-halt-on-error",
-                    str(tex_path),
+                    "-output-directory=.",
+                    abs_tex_path.name,
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=120,
                 check=False,
-                cwd=str(tex_path.parent),
+                cwd=str(abs_tex_path.parent),
             )
         except FileNotFoundError:
             break

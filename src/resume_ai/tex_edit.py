@@ -36,3 +36,79 @@ def set_header_availability(tex: str, availability: str | None) -> str:
     new_avail = (availability or "").strip()
     replacement = f"\\resumeheader{{{name}}}{{{location}}}{{{new_avail}}}{{{email}}}{{{link}}}"
     return tex[: m.start()] + replacement + tex[m.end() :]
+
+
+def escape_latex_text(text: str) -> str:
+    """Escape LaTeX special characters in plain text.
+
+    Only escapes characters that are not already escaped. Leaves existing LaTeX
+    commands intact by avoiding escaping backslashes themselves.
+    """
+    if not text:
+        return text
+
+    # Unescaped specials: %, $, &, #, _, {, }
+    patterns = [
+        (r"(?<!\\)%", r"\\%"),
+        (r"(?<!\\)\$", r"\\$"),
+        (r"(?<!\\)&", r"\\&"),
+        (r"(?<!\\)#", r"\\#"),
+        (r"(?<!\\)_", r"\\_"),
+        (r"(?<!\\)\\{", r"\\{"),
+        (r"(?<!\\)\\}", r"\\}"),
+    ]
+
+    # Tilde and caret have no simple escapes in text mode
+    # Replace unescaped ~ and ^ with text macros
+    patterns.extend([
+        (r"(?<!\\)~", r"\\textasciitilde{}"),
+        (r"(?<!\\)\^", r"\\textasciicircum{}"),
+    ])
+
+    escaped = text
+    for pattern, repl in patterns:
+        escaped = re.sub(pattern, repl, escaped)
+    return escaped
+
+
+_ANGLE_CONTENT_RE = re.compile(r"<\s*([^<>]+?)\s*>")
+_MD_BOLD_RE = re.compile(r"\*\*([^\n]*?)\*\*")
+_MD_ITALIC_RE = re.compile(r"(?<!\*)\*([^\n*]+?)\*(?!\*)")
+_MD_UNDER_BOLD_RE = re.compile(r"__([^\n_]+?)__")
+_MD_UNDER_ITALIC_RE = re.compile(r"(?<!_)_([^\n_]+?)_(?!_)")
+
+
+def sanitize_llm_bullet(text: str) -> str:
+    """Normalize raw LLM bullet text before LaTeX escaping.
+
+    - Unwraps angle-bracket placeholders: "<SQL>" -> "SQL", removes empty "<>"
+    - Strips Markdown emphasis wrappers: **bold**, *italic*, __bold__, _italic_
+    - Leaves inner content verbatim so numbers and symbols remain
+    - Run before LaTeX escaping
+    """
+    if not text:
+        return text
+    s = text
+    # Remove empty placeholders first
+    s = s.replace("<>", "")
+    # Unwrap single-level <...> markers
+    # Apply repeatedly in case of multiple occurrences
+    for _ in range(5):
+        if "<" not in s:
+            break
+        s_new = _ANGLE_CONTENT_RE.sub(r"\1", s)
+        if s_new == s:
+            break
+        s = s_new
+
+    # Remove common Markdown emphasis wrappers
+    # Apply a few times to handle nested/multiple occurrences
+    for _ in range(3):
+        s_new = _MD_BOLD_RE.sub(r"\1", s)
+        s_new = _MD_UNDER_BOLD_RE.sub(r"\1", s_new)
+        s_new = _MD_ITALIC_RE.sub(r"\1", s_new)
+        s_new = _MD_UNDER_ITALIC_RE.sub(r"\1", s_new)
+        if s_new == s:
+            break
+        s = s_new
+    return s.strip()

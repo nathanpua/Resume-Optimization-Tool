@@ -33,13 +33,14 @@ PYTHONPATH="src:." python -m resume_ai.cli optimize \
   --out ./out
 ```
 
-- Run with JD URL and a custom TeX input file:
+- Run with JD URL and a custom TeX input file (Gemini default):
 ```bash
 PYTHONPATH="src:." python -m resume_ai.cli optimize \
   --jd-url "https://company.com/jobs/123" \
   --input-tex ./Nathan_Pua_Resume.tex \
   --out ./out
 ```
+
 
 - Include availability in the header (only shown when provided):
 ```bash
@@ -50,10 +51,26 @@ PYTHONPATH="src:." python -m resume_ai.cli optimize \
   --out ./out
 ```
 
+### Using OpenAI (GPT) models
+- Set `OPENAI_API_KEY` in `.env`.
+- Pass a GPT model via `--model`, e.g. `gpt-5` or `gpt-4o-mini`:
+```bash
+PYTHONPATH="src:." python -m resume_ai.cli optimize \
+  --jd-url "https://company.com/jobs/123" \
+  --input-tex ./Nathan_Pua_Resume.tex \
+  --model gpt-5 \
+  --out ./out
+```
+If `--model` contains "gpt", the OpenAI client is used; otherwise the Google client is used. You can also set `OPENAI_MODEL` or `GOOGLE_MODEL` in `.env`.
+
+
 ### Outputs
-- `out/resume.tex`: Your TeX with the exact original formatting, but bullets inside `itemize` blocks rewritten and aligned to the JD.
-- `out/resume.pdf`: Generated if `latexmk`/`pdflatex` are installed and on PATH.
-- `out/report.json`: Coverage and changes report, including:
+- Per-run outputs are written under a job-specific folder inside `out/`.
+- Folder name is derived from the JD (title/company) or can be overridden via `--job-name`.
+- Example: `out/senior-data-engineer-acme/` containing:
+  - `resume.tex`: Your TeX with the exact original formatting, but bullets inside `itemize` blocks rewritten and aligned to the JD.
+  - `resume.pdf`: Generated if `latexmk`/`pdflatex` are installed and on PATH.
+  - `report.json`: Coverage and changes report, including:
   - required/preferred keywords present/missing
   - before/after keyword counts
   - per-block change justifications (keywords added)
@@ -71,3 +88,5 @@ PYTHONPATH="src:." python -m resume_ai.cli optimize \
   - Provide a richer JD (`--jd-text` or `--jd-url`).
 - Different template filename:
   - Use `--input-tex /absolute/path/to/your_resume.tex`.
+
+
