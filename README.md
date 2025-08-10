@@ -49,3 +49,46 @@ Optional environment variables:
 ## Notes
 - LaTeX compilation artifacts are kept next to the generated `resume.tex` inside `out/<job-name>/`.
 - Keyword extraction and bullet rewriting use the selected model; see `src/resume_ai/prompts.py` and LLM clients in `src/resume_ai/lm_google.py`, `src/resume_ai/lm_openai.py`.
+
+## Streamlit UI (Frontend)
+
+Run a web UI to upload your resume, provide a JD (URL or text), and view/download outputs.
+
+### Install
+```bash
+pip install -r requirements.txt
+```
+
+Ensure a TeX distribution is installed (for PDF generation):
+- macOS: MacTeX (adds binaries under `/Library/TeX/texbin`)
+- Minimal (BasicTeX) users: you may need extra packages. See Troubleshooting.
+
+Set environment in `.env` (auto-loaded by backend):
+- `GOOGLE_API_KEY` or `OPENAI_API_KEY`
+- Optional: `TEXBIN=/Library/TeX/texbin` (if PATH issues)
+
+### Run
+```bash
+streamlit run app/streamlit_app.py
+```
+
+### UI features
+- Upload resume (PDF ≤ 15 MB)
+- Provide JD by URL (≤ 2048 chars) or text (≤ 20,000 chars)
+- Optional: upload TeX template (≤ 1 MB) or default to `Nathan_Pua_Resume.tex`
+- Advanced options: model, strategy, pages, availability, job name, reuse outputs
+- Results tabs: PDF viewer, Report (coverage and changes), Diagnostics (compile log)
+- Downloads: `report.json` and `resume.pdf` (if LaTeX available)
+
+### Troubleshooting PDF generation
+- If the PDF tab says "PDF not available":
+  1) Check Diagnostics tab:
+     - `resume_compile.log` (tail of compile output)
+     - PATH and `which latexmk/pdflatex`
+  2) On macOS, set in `.env`:
+     - `TEXBIN=/Library/TeX/texbin`
+  3) Install missing LaTeX packages flagged by the log (BasicTeX example):
+```bash
+/Library/TeX/texbin/tlmgr update --self
+/Library/TeX/texbin/tlmgr install geometry inputenc fontenc lmodern microtype enumitem hyperref titlesec parskip
+```

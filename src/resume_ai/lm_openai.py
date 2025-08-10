@@ -1,11 +1,18 @@
 from __future__ import annotations
 import json
 import os
+import ssl
 import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional
 
 from . import prompts
+
+# Use certifi CA bundle when available to avoid SSL certificate issues on some systems
+try:  # pragma: no cover - availability depends on runtime env
+    import certifi  # type: ignore
+except Exception:  # pragma: no cover
+    certifi = None  # type: ignore
 
 
 class OpenAIClient:
@@ -28,6 +35,18 @@ class OpenAIClient:
         self.last_status: str = ""
         self.last_error: str = ""
 
+        # Build SSL context with certifi CA bundle when available
+        try:
+            if certifi is not None:
+                # Hint the Python SSL layer and also create an explicit context we will pass to urlopen
+                os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+                self.ssl_context = ssl.create_default_context(cafile=certifi.where())
+            else:
+                self.ssl_context = ssl.create_default_context()
+        except Exception:
+            # As a last resort, fall back to default context
+            self.ssl_context = ssl.create_default_context()
+
     def _is_configured(self) -> bool:
         return bool(self.api_key)
 
@@ -43,7 +62,7 @@ class OpenAIClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self.request_timeout_s) as resp:
+            with urllib.request.urlopen(req, timeout=self.request_timeout_s, context=self.ssl_context) as resp:
                 self.calls_made += 1
                 resp_data = resp.read().decode("utf-8", errors="ignore")
                 self.last_status = "ok"
@@ -52,7 +71,9 @@ class OpenAIClient:
         except Exception as e:
             self.calls_made += 1
             self.last_status = "error"
-            self.last_error = f"{type(e).__name__}: {getattr(e, 'reason', getattr(e, 'code', ''))}"
+            reason_or_code = getattr(e, "reason", getattr(e, "code", ""))
+            msg = str(e) or reason_or_code
+            self.last_error = f"{type(e).__name__}: {msg}"
             return None
 
     def _call(self, prompt: str) -> str:
