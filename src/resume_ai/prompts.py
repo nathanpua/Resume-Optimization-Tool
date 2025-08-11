@@ -257,6 +257,8 @@ Transform the provided experience into 4-6 compelling, ATS-optimized resume bull
 
 **Target Keywords**: {keywords}
 
+{resume_context_section}
+
 Begin analysis and provide optimized resume bullets in JSON format:
 """)
 

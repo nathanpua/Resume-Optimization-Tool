@@ -14,6 +14,43 @@ class JobListing:
     url: Optional[str] = None
 
 
+def _default_headers(target_url: str) -> dict:
+    """Return browser-like headers to avoid simplistic bot-blocking (404/403).
+
+    We mimic a recent Safari UA by default and set common Accept/Language headers.
+    """
+    try:
+        parsed = urlparse(target_url)
+        referer = f"{parsed.scheme}://{parsed.netloc}/" if parsed.scheme and parsed.netloc else None
+    except Exception:
+        referer = None
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    }
+    if referer:
+        headers["Referer"] = referer
+    return headers
+
+
+def _alt_headers() -> dict:
+    """Alternate headers (Chrome-like UA) for a retry on failure."""
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    }
+
+
 def fetch_job_listing(url: Optional[str] = None, raw_text: Optional[str] = None) -> JobListing:
     """Fetch job listing from URL or accept raw text.
 
@@ -30,14 +67,24 @@ def fetch_job_listing(url: Optional[str] = None, raw_text: Optional[str] = None)
         # Not a URL; treat as raw text
         return JobListing(source="raw_text", text=url.strip(), url=None)
 
-    req = Request(url, headers={"User-Agent": "resume-ai/0.1"})
-    with urlopen(req, timeout=10) as resp:
-        data = resp.read()
+    # Attempt fetch with realistic headers first, then retry with an alternate UA on HTTP errors
+    last_error: Exception | None = None
+    for attempt, headers in enumerate((_default_headers(url), _alt_headers())):
         try:
-            text = data.decode("utf-8", errors="ignore")
-        except Exception:
-            text = data.decode("latin-1", errors="ignore")
-    return JobListing(source="url", text=text, url=url)
+            req = Request(url, headers=headers)
+            with urlopen(req, timeout=15) as resp:
+                data = resp.read()
+                try:
+                    text = data.decode("utf-8", errors="ignore")
+                except Exception:
+                    text = data.decode("latin-1", errors="ignore")
+                return JobListing(source="url", text=text, url=url)
+        except Exception as exc:
+            last_error = exc
+            # Only retry once with alternate headers
+            continue
+    # If both attempts failed, return empty text but keep source/url for diagnostics
+    return JobListing(source="url", text="", url=url)
 
 
 def _strip_html(raw: str) -> str:

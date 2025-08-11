@@ -92,3 +92,105 @@ streamlit run app/streamlit_app.py
 /Library/TeX/texbin/tlmgr update --self
 /Library/TeX/texbin/tlmgr install geometry inputenc fontenc lmodern microtype enumitem hyperref titlesec parskip
 ```
+
+## How it works (Architecture)
+
+- **Entry points**
+  - CLI: `main.py` and `src/resume_ai/cli.py` call `src/resume_ai/optimize.optimize_resume`.
+  - Streamlit: `app/streamlit_app.py` provides a UI and also calls `optimize_resume` in‑process.
+- **Core optimizer**: `src/resume_ai/optimize.py`
+  - Loads env (`src/resume_ai/env.py`).
+  - Picks model/provider: `src/resume_ai/lm_google.py` (Gemini) or `src/resume_ai/lm_openai.py` (GPT) based on model name.
+  - Fetches JD text via `tools/jd_ingest.py`.
+  - Reads base TeX (`--input-tex` or `Nathan_Pua_Resume.tex`).
+  - Extracts keywords from the JD, rewrites only LaTeX `\item` bullets (`src/resume_ai/tex_edit.py`).
+  - Computes keyword coverage before/after (`src/resume_ai/coverage.py`).
+  - Writes `resume.tex` and compiles PDF via `tools/latex.py`.
+  - Returns a report dict; CLI/UI also write `out/<job-name>/report.json`.
+
+### End‑to‑end flow
+1) Ingest JD (URL or raw text) → `tools/jd_ingest.fetch_job_listing`
+2) Choose model/provider → `optimize.py` uses `GOOGLE_*` or `OPENAI_*` env and optional `--model`
+3) Read & minimally edit TeX:
+   - Optionally set header availability → `tex_edit.set_header_availability`
+   - Extract `itemize` blocks → `tex_edit.extract_itemize_blocks`
+   - Rewrite bullets per block using LLM → `lm_google`/`lm_openai`
+   - Sanitize text for LaTeX → `tex_edit.sanitize_llm_bullet` + `tex_edit.escape_latex_text`
+   - Replace only the original `itemize` blocks → `tex_edit.replace_itemize_block`
+4) Compute coverage deltas → `coverage.compute_keyword_coverage`
+5) Write outputs and compile PDF → `tools.latex.compile_pdf`
+
+### Outputs
+- Folder: `out/<job-name>/`
+  - `resume.tex`: final LaTeX
+  - `resume.pdf`: compiled PDF (may be `None` if LaTeX not installed)
+  - `report.json`: end‑to‑end metadata including:
+    - `outputs`: `{ tex, pdf }`
+    - `llm`: `{ provider, model, configured, calls_made, last_status, last_error }`
+    - `coverage`: present/missing terms, counts, change notes
+    - `change_justifications`: per‑block old/new bullets + added keywords
+    - `jd_source`: `{ url, text_length }`
+
+## Execution flows
+
+### CLI flow
+```bash
+python main.py optimize \
+  --jd-url "https://…" \
+  --resume ./inputs/resume.pdf \
+  --out ./out \
+  --strategy balanced --pages auto --availability "Available from Oct 2025"
+```
+Notes:
+- If `--job-name` is omitted, a slug is derived from the JD content/URL.
+- If `--input-tex` is omitted, the optimizer tries `Nathan_Pua_Resume.tex` in repo root; otherwise writes a placeholder TeX.
+
+### Streamlit flow
+```bash
+streamlit run app/streamlit_app.py
+```
+- Upload resume (PDF), provide JD (URL or text), adjust options, then Optimize.
+- Results view shows PDF (if available), coverage, changes, diagnostics, and downloads.
+
+## Configuration
+
+- `.env` (auto‑loaded):
+  - `GOOGLE_API_KEY` and/or `OPENAI_API_KEY`
+  - Optional: `GOOGLE_MODEL` / `OPENAI_MODEL` (defaults to `gemini-2.0-flash` if none provided)
+  - Optional: `OPENAI_FALLBACK_MODEL` (used when a GPT call fails; default `gpt-4o-mini`)
+  - Optional (macOS LaTeX): `TEXBIN=/Library/TeX/texbin`
+
+## Module map
+
+- `src/resume_ai/optimize.py`: Orchestrates the full pipeline.
+- `src/resume_ai/env.py`: Minimal `.env` loader.
+- `src/resume_ai/lm_google.py`: Gemini client (JSON‑aware).
+- `src/resume_ai/lm_openai.py`: GPT client (with certifi fallback).
+- `src/resume_ai/tex_edit.py`: TeX parsing and safe text transforms.
+- `src/resume_ai/coverage.py`: Keyword coverage comparison.
+- `tools/jd_ingest.py`: JD fetching, title/company slug derivation.
+- `tools/latex.py`: `latexmk`/`pdflatex` wrapper with diagnostics log.
+
+## Templates
+
+- `templates/ats_nathan.tex`: opinionated single‑column ATS template with `\resumeheader`.
+- `templates/ats_simple.tex`: minimal skeleton for experimentation.
+- You can pass a custom `.tex` via `--input-tex` or upload in Streamlit.
+
+## Development & tests
+
+- Run unit tests:
+```bash
+pytest -q
+```
+- Notable tests:
+  - `tests/test_tex_edit.py`: itemize extraction/replacement and header availability behavior.
+  - `tests/test_smoke.py`: smoke test that the optimizer writes a TeX file.
+
+## Serena MCP (project assistant)
+
+This repo is initialized for Serena MCP. The project config is created at `.serena/project.yml` and enables code navigation and edits inside Cursor.
+
+- To (re)activate in Cursor: use “Activate project” and choose `LmPlayground`.
+- You can ask the assistant to: search code, edit files, run tests, or update docs.
+

@@ -216,14 +216,26 @@ class GoogleLMClient:
             "domains": _dedup(domains),
         }
 
-    def rewrite_bullets(self, experience_item: Dict[str, Any], target_keywords: List[str]) -> List[str]:
+    def rewrite_bullets(self, experience_item: Dict[str, Any], target_keywords: List[str], resume_markdown: str | None = None) -> List[str]:
         try:
             exp_json = json.dumps(experience_item)
             kw = ", ".join(target_keywords or [])
         except Exception:
             exp_json = "{}"
             kw = ""
-        prompt = self._render_prompt(prompts.BULLET_REWRITE_PROMPT, experience_json=exp_json, keywords=kw)
+        resume_context_section = ""
+        if isinstance(resume_markdown, str) and resume_markdown.strip():
+            # Bound the size to avoid excessive prompt length
+            snippet = resume_markdown.strip()
+            if len(snippet) > 5000:
+                snippet = snippet[:5000]
+            resume_context_section = f"\n## Candidate Resume (Markdown excerpt)\n\n{snippet}\n"
+        prompt = self._render_prompt(
+            prompts.BULLET_REWRITE_PROMPT,
+            experience_json=exp_json,
+            keywords=kw,
+            resume_context_section=resume_context_section,
+        )
         text = self._call_json(prompt) or self._call(prompt)
         try:
             data = json.loads(text)

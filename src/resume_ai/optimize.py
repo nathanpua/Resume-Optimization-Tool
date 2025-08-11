@@ -4,6 +4,7 @@ import os
 from typing import Any, Dict, List
 
 from tools.latex import compile_pdf
+from tools.resume_parse import convert_pdf_to_markdown
 from .env import load_dotenv
 from .lm_google import GoogleLMClient
 from .lm_openai import OpenAIClient
@@ -82,6 +83,9 @@ def optimize_resume(
     # Extract bullets
     blocks = extract_itemize_blocks(before_tex)
 
+    # Convert resume PDF to Markdown (optional context for LLM)
+    resume_md = convert_pdf_to_markdown(resume_path) if resume_path else ""
+
     # Extract keywords and plan (clip JD to avoid oversized payloads)
     jd_text_for_llm = (jd_text or "")
     if len(jd_text_for_llm) > 20000:
@@ -103,7 +107,7 @@ def optimize_resume(
     new_bullets_per_block: List[List[str]] = []
     per_block_changes: List[Dict[str, Any]] = []
     for _, items in blocks:
-        rewritten = llm.rewrite_bullets({"bullets": items}, target_keywords=target_keywords)
+        rewritten = llm.rewrite_bullets({"bullets": items}, target_keywords=target_keywords, resume_markdown=resume_md or None)
         if not rewritten:
             rewritten = items
         if len(rewritten) < len(items):

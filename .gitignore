@@ -1,8 +1,11 @@
 # Environment variables
 .env
+.DS_Store
+.serena/
 
 # Generated outputs (resumes, PDFs, reports)
 out/
+USAGE.md
 
 # Root-level resume files
 resume.*
