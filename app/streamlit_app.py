@@ -141,13 +141,11 @@ st.set_page_config(page_title="Resume AI Optimizer", layout="wide")
 st.title("Resume AI Optimizer")
 st.caption("Tailor your resume to a job description and view the results.")
 
-# Env guidance
-has_google = bool(os.getenv("GOOGLE_API_KEY"))
-has_openai = bool(os.getenv("OPENAI_API_KEY"))
+# Env guidance (OpenRouter only)
 has_openrouter = bool(os.getenv("OPENROUTER_API_KEY"))
-if not (has_google or has_openai or has_openrouter):
+if not has_openrouter:
     st.warning(
-        "No LLM API key detected. Set `OPENROUTER_API_KEY` (recommended) or `GOOGLE_API_KEY` or `OPENAI_API_KEY` in `.env`.",
+        "No LLM API key detected. Set `OPENROUTER_API_KEY` in `.env`.",
         icon="⚠️",
     )
 
@@ -166,13 +164,8 @@ with st.form("inputs_form"):
     with st.expander("Advanced options", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
-            # Choose placeholder based on available provider; prefer OpenRouter defaults
-            if has_openrouter:
-                default_placeholder = os.getenv("OPENROUTER_MODEL") or "deepseek/deepseek-chat-v3-0324:free"
-            elif has_openai:
-                default_placeholder = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
-            else:
-                default_placeholder = os.getenv("GOOGLE_MODEL") or "gemini-2.0-flash"
+            # Choose placeholder; prefer OpenRouter defaults
+            default_placeholder = os.getenv("OPENROUTER_MODEL") or "deepseek/deepseek-chat-v3-0324:free"
             model = st.text_input(
                 "Model (optional)",
                 placeholder=default_placeholder,

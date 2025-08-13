@@ -15,7 +15,7 @@ def main():
     parser.add_argument("--input-tex", dest="input_tex", default=None, help="Path to input TeX template to preserve and edit")
     parser.add_argument("--jd-text", dest="jd_text", default=None, help="Job description raw text")
     parser.add_argument("--job-name", dest="job_name", default=None, help="Folder name for outputs (defaults to sanitized job text)")
-    parser.add_argument("--model", dest="model", default=None, help="LLM model id (overrides GOOGLE_MODEL/OPENAI_MODEL), e.g. 'gemini-2.0-flash' or 'gpt-5'")
+    parser.add_argument("--model", dest="model", default='moonshotai/kimi-k2:free', help="OpenRouter model id (e.g., 'z-ai/glm-4.5v', 'openrouter/auto')")
     parser.add_argument("--resume", dest="resume_path", required=False, help="Path to resume (PDF only)")
     parser.add_argument("--out", dest="out_dir", default="out", help="Output directory")
     parser.add_argument("--strategy", dest="strategy", default="balanced", choices=["conservative", "balanced", "bold"], help="Optimization strategy")

@@ -31,7 +31,7 @@ python -m resume_ai.cli optimize --jd-text "Sample JD" --out out
 - `--input-tex`: Path to input TeX template to preserve and edit (defaults to `Nathan_Pua_Resume.tex` in repo root)
 - `--out`: Base output directory (default: `out`)
 - `--job-name`: Folder name under the output directory; if omitted, derived from JD contents/URL
-- `--model`: LLM model id (overrides env), e.g. `gemini-2.0-flash`, `gpt-4o-mini`
+- `--model`: OpenRouter model id (overrides env), e.g. `z-ai/glm-4.5v`, `openrouter/auto`, `openai/gpt-4o-mini`
 - `--strategy`: Optimization strategy: `conservative` | `balanced` | `bold` (default: `balanced`)
 - `--pages`: Target page count policy: `auto` | `one` | `two` (default: `auto`)
 - `--availability`: Availability line to show in header; omitted if not provided
@@ -39,13 +39,9 @@ python -m resume_ai.cli optimize --jd-text "Sample JD" --out out
 
 ## Environment
 Set API keys in `.env` (auto‑loaded):
-- `GOOGLE_API_KEY` for Gemini models
-- `OPENAI_API_KEY` for GPT models
 - `OPENROUTER_API_KEY` for OpenRouter (multi‑provider) models
 
 Optional environment variables:
-- `GOOGLE_MODEL` / `OPENAI_MODEL`: default model ids
-- `OPENAI_FALLBACK_MODEL`: used if a GPT call fails (default: `gpt-4o-mini`)
 - `OPENROUTER_MODEL`: primary OpenRouter model (e.g., `openrouter/auto`, `openai/gpt-4o-mini`)
 - `OPENROUTER_MODEL_FALLBACK`: fallback model if primary fails (default: `moonshotai/kimi-k2`)
 - `OPENROUTER_MODELS`: comma‑separated ordered list to try (overrides primary/fallback ordering)
@@ -88,7 +84,7 @@ python tools/openrouter_ping.py \
 
 ## Notes
 - LaTeX compilation artifacts are kept next to the generated `resume.tex` inside `out/<job-name>/`.
-- Keyword extraction and bullet rewriting use the selected model; see `src/resume_ai/prompts.py` and LLM clients in `src/resume_ai/lm_google.py`, `src/resume_ai/lm_openai.py`.
+- Keyword extraction and bullet rewriting use the selected model; see `src/resume_ai/prompts.py` and OpenRouter client in `src/resume_ai/lm_openrouter.py`.
 
 ## Streamlit UI (Frontend)
 
@@ -104,7 +100,7 @@ Ensure a TeX distribution is installed (for PDF generation):
 - Minimal (BasicTeX) users: you may need extra packages. See Troubleshooting.
 
 Set environment in `.env` (auto-loaded by backend):
-- `GOOGLE_API_KEY` or `OPENAI_API_KEY`
+- `OPENROUTER_API_KEY`
 - Optional: `TEXBIN=/Library/TeX/texbin` (if PATH issues)
 
 ### Run
@@ -138,9 +134,9 @@ streamlit run app/streamlit_app.py
 - **Entry points**
   - CLI: `main.py` and `src/resume_ai/cli.py` call `src/resume_ai/optimize.optimize_resume`.
   - Streamlit: `app/streamlit_app.py` provides a UI and also calls `optimize_resume` in‑process.
-- **Core optimizer**: `src/resume_ai/optimize.py`
+-- **Core optimizer**: `src/resume_ai/optimize.py`
   - Loads env (`src/resume_ai/env.py`).
-  - Picks model/provider: `src/resume_ai/lm_openrouter.py` (OpenRouter multi‑provider), `src/resume_ai/lm_google.py` (Gemini), or `src/resume_ai/lm_openai.py` (GPT) based on env/model.
+  - Picks model: `src/resume_ai/lm_openrouter.py` (OpenRouter multi‑provider).
   - Fetches JD text via `tools/jd_ingest.py`.
   - Reads base TeX (`--input-tex` or `Nathan_Pua_Resume.tex`).
   - Extracts keywords from the JD, rewrites only LaTeX `\item` bullets (`src/resume_ai/tex_edit.py`).
@@ -150,11 +146,11 @@ streamlit run app/streamlit_app.py
 
 ### End‑to‑end flow
 1) Ingest JD (URL or raw text) → `tools/jd_ingest.fetch_job_listing`
-2) Choose model/provider → `optimize.py` prefers OpenRouter when `OPENROUTER_API_KEY` is set and the model looks like `provider/model` or `openrouter/*`; otherwise falls back to OpenAI (when model includes `gpt`) or Google
+2) Choose model → OpenRouter client selected with `OPENROUTER_MODEL` or UI/CLI `--model`.
 3) Read & minimally edit TeX:
    - Optionally set header availability → `tex_edit.set_header_availability`
    - Extract `itemize` blocks → `tex_edit.extract_itemize_blocks`
-   - Rewrite bullets per block using LLM → `lm_google`/`lm_openai`
+   - Rewrite bullets per block using LLM → `lm_openrouter`
    - Sanitize text for LaTeX → `tex_edit.sanitize_llm_bullet` + `tex_edit.escape_latex_text`
    - Replace only the original `itemize` blocks → `tex_edit.replace_itemize_block`
 4) Compute coverage deltas → `coverage.compute_keyword_coverage`
@@ -195,9 +191,7 @@ streamlit run app/streamlit_app.py
 ## Configuration
 
 - `.env` (auto‑loaded):
-  - `GOOGLE_API_KEY` and/or `OPENAI_API_KEY`
-  - Optional: `GOOGLE_MODEL` / `OPENAI_MODEL` (defaults to `gemini-2.0-flash` if none provided)
-  - Optional: `OPENAI_FALLBACK_MODEL` (used when a GPT call fails; default `gpt-4o-mini`)
+  - `OPENROUTER_API_KEY`
   - Optional (macOS LaTeX): `TEXBIN=/Library/TeX/texbin`
 
 ## Module map
@@ -205,8 +199,6 @@ streamlit run app/streamlit_app.py
 - `src/resume_ai/optimize.py`: Orchestrates the full pipeline.
 - `src/resume_ai/env.py`: Minimal `.env` loader.
 - `src/resume_ai/lm_openrouter.py`: OpenRouter client with explicit fallback ordering (defaults to Kimi K2).
-- `src/resume_ai/lm_google.py`: Gemini client (JSON‑aware).
-- `src/resume_ai/lm_openai.py`: GPT client (with certifi fallback).
 - `src/resume_ai/tex_edit.py`: TeX parsing and safe text transforms.
 - `src/resume_ai/coverage.py`: Keyword coverage comparison.
 - `tools/jd_ingest.py`: JD fetching, title/company slug derivation.

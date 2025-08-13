@@ -6,8 +6,6 @@ from typing import Any, Dict, List, Optional, Callable
 from tools.latex import compile_pdf
 from tools.resume_parse import convert_pdf_to_markdown
 from .env import load_dotenv
-from .lm_google import GoogleLMClient
-from .lm_openai import OpenAIClient
 from .lm_openrouter import OpenRouterClient
 from .tex_edit import (
     extract_itemize_blocks,
@@ -28,7 +26,7 @@ def optimize_resume(
     preferences: Dict[str, Any],
     progress_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
-    """Preserve base TeX format, change only bullets using Gemini 2.0 Flash, and compile PDF.
+    """Preserve base TeX format, change only bullets using an OpenRouter model, and compile PDF.
 
     - Base template: preferences["input_tex"] or repo root `Nathan_Pua_Resume.tex`.
     - Only edits contents of itemize blocks; updates header availability only when provided.
@@ -47,36 +45,15 @@ def optimize_resume(
     # Load environment and set up LLM
     _notify("loading_env")
     load_dotenv()
-    # Model selection rules (prefer OpenRouter when available):
-    # - If preferences.model is provided, use it
-    # - Else when OPENROUTER_API_KEY is set: OPENROUTER_MODEL or default to DeepSeek v3 free
-    # - Else fall back to GOOGLE_MODEL or OPENAI_MODEL or gemini-2.0-flash
+    # Model selection rules (OpenRouter-only):
+    # - If preferences.model is provided, use it as-is
+    # - Else use OPENROUTER_MODEL or default to DeepSeek v3 free
     requested_model = (preferences or {}).get("model")
     if not requested_model:
-        if os.getenv("OPENROUTER_API_KEY"):
-            requested_model = os.getenv("OPENROUTER_MODEL") or "deepseek/deepseek-chat-v3-0324:free"
-        else:
-            requested_model = (
-                os.getenv("GOOGLE_MODEL")
-                or os.getenv("OPENAI_MODEL")
-                or "gemini-2.0-flash"
-            )
+        requested_model = os.getenv("OPENROUTER_MODEL") or "deepseek/deepseek-chat-v3-0324:free"
 
-    # Provider selection:
-    # - Prefer OpenRouter when API key present and model looks like provider/model or openrouter/*
-    # - Else use OpenAI when model contains 'gpt'
-    # - Else use Google
-    model_lc = (requested_model or "").lower()
-    have_openrouter = bool(os.getenv("OPENROUTER_API_KEY"))
-    use_openrouter = have_openrouter and ("/" in model_lc or model_lc.startswith("openrouter/") or model_lc in ("openrouter", "openrouter/auto"))
-    use_openai = (not use_openrouter) and ("gpt" in model_lc)
-
-    if use_openrouter:
-        llm = OpenRouterClient(model=requested_model)
-    elif use_openai:
-        llm = OpenAIClient(model=requested_model)
-    else:
-        llm = GoogleLMClient(model=requested_model)
+    # Provider selection: OpenRouter only
+    llm = OpenRouterClient(model=requested_model)
     _notify("model_selected")
 
     # Determine base TeX input
@@ -125,23 +102,16 @@ def optimize_resume(
         jd_text_for_llm = jd_text_for_llm[:20000]
     keywords = llm.extract_keywords(jd_text_for_llm)
 
-    # Fallbacks by provider on error + empty keywords
+    # Fallback on error + empty keywords
     if not ((keywords.get("required") or []) or (keywords.get("preferred") or [])):
         last_status = getattr(llm, "last_status", "")
         if last_status == "error":
-            if use_openrouter:
-                # Align with lm_openrouter.py env var naming and default to Kimi K2
-                fallback_model = os.getenv("OPENROUTER_MODEL_FALLBACK", "moonshotai/kimi-k2")
-                if fallback_model and fallback_model != requested_model:
-                    llm = OpenRouterClient(model=fallback_model)
-                    requested_model = fallback_model
-                    keywords = llm.extract_keywords(jd_text_for_llm)
-            elif use_openai:
-                fallback_model = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4o-mini")
-                if fallback_model and fallback_model != requested_model:
-                    llm = OpenAIClient(model=fallback_model)
-                    requested_model = fallback_model
-                    keywords = llm.extract_keywords(jd_text_for_llm)
+            # Align with lm_openrouter.py env var naming and default to Kimi K2
+            fallback_model = os.getenv("OPENROUTER_MODEL_FALLBACK", "moonshotai/kimi-k2")
+            if fallback_model and fallback_model != requested_model:
+                llm = OpenRouterClient(model=fallback_model)
+                requested_model = fallback_model
+                keywords = llm.extract_keywords(jd_text_for_llm)
     target_keywords: List[str] = (keywords.get("required", []) + keywords.get("preferred", []))[:40]
 
     # Rewrite bullets per block
@@ -188,13 +158,8 @@ def optimize_resume(
     pdf_path = compile_pdf(tex_path)
 
     # LLM diagnostics for report
-    llm_provider = "openrouter" if use_openrouter else ("openai" if use_openai else "google")
-    if use_openrouter:
-        llm_configured = bool(os.getenv("OPENROUTER_API_KEY"))
-    elif use_openai:
-        llm_configured = bool(os.getenv("OPENAI_API_KEY"))
-    else:
-        llm_configured = bool(os.getenv("GOOGLE_API_KEY"))
+    llm_provider = "openrouter"
+    llm_configured = bool(os.getenv("OPENROUTER_API_KEY"))
     llm_stats = {
         "provider": llm_provider,
         "model": requested_model,
