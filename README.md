@@ -41,10 +41,50 @@ python -m resume_ai.cli optimize --jd-text "Sample JD" --out out
 Set API keys in `.env` (auto‑loaded):
 - `GOOGLE_API_KEY` for Gemini models
 - `OPENAI_API_KEY` for GPT models
+- `OPENROUTER_API_KEY` for OpenRouter (multi‑provider) models
 
 Optional environment variables:
 - `GOOGLE_MODEL` / `OPENAI_MODEL`: default model ids
 - `OPENAI_FALLBACK_MODEL`: used if a GPT call fails (default: `gpt-4o-mini`)
+- `OPENROUTER_MODEL`: primary OpenRouter model (e.g., `openrouter/auto`, `openai/gpt-4o-mini`)
+- `OPENROUTER_MODEL_FALLBACK`: fallback model if primary fails (default: `moonshotai/kimi-k2`)
+- `OPENROUTER_MODELS`: comma‑separated ordered list to try (overrides primary/fallback ordering)
+- `OPENROUTER_REFERER` / `OPENROUTER_TITLE`: optional headers for routing/analytics
+- `OPENROUTER_HTTP_TIMEOUT`: request timeout seconds (default: `15`)
+
+## OpenRouter setup and testing
+
+1) Create an account and API key:
+   - Keys: `https://openrouter.ai/settings/keys`
+   - Credits: `https://openrouter.ai/settings/credits`
+
+2) Configure environment (example uses Kimi K2 as fallback):
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+export OPENROUTER_MODEL="openrouter/auto"
+export OPENROUTER_MODEL_FALLBACK="moonshotai/kimi-k2"
+# optional, explicit order:
+# export OPENROUTER_MODELS="openai/gpt-4o-mini,anthropic/claude-3.5-sonnet,moonshotai/kimi-k2"
+```
+
+3) Ping test (JSON mode):
+```bash
+PYTHONPATH="src:." \
+python tools/openrouter_ping.py \
+  --prompt "Return a JSON object with key 'pong': true" \
+  --json \
+  --timeout 20
+```
+
+4) Direct Kimi K2 test:
+```bash
+PYTHONPATH="src:." \
+python tools/openrouter_ping.py \
+  --prompt "Return a JSON object with key 'model': 'kimi-k2'" \
+  --json \
+  --model moonshotai/kimi-k2 \
+  --timeout 20
+```
 
 ## Notes
 - LaTeX compilation artifacts are kept next to the generated `resume.tex` inside `out/<job-name>/`.
@@ -100,7 +140,7 @@ streamlit run app/streamlit_app.py
   - Streamlit: `app/streamlit_app.py` provides a UI and also calls `optimize_resume` in‑process.
 - **Core optimizer**: `src/resume_ai/optimize.py`
   - Loads env (`src/resume_ai/env.py`).
-  - Picks model/provider: `src/resume_ai/lm_google.py` (Gemini) or `src/resume_ai/lm_openai.py` (GPT) based on model name.
+  - Picks model/provider: `src/resume_ai/lm_openrouter.py` (OpenRouter multi‑provider), `src/resume_ai/lm_google.py` (Gemini), or `src/resume_ai/lm_openai.py` (GPT) based on env/model.
   - Fetches JD text via `tools/jd_ingest.py`.
   - Reads base TeX (`--input-tex` or `Nathan_Pua_Resume.tex`).
   - Extracts keywords from the JD, rewrites only LaTeX `\item` bullets (`src/resume_ai/tex_edit.py`).
@@ -110,7 +150,7 @@ streamlit run app/streamlit_app.py
 
 ### End‑to‑end flow
 1) Ingest JD (URL or raw text) → `tools/jd_ingest.fetch_job_listing`
-2) Choose model/provider → `optimize.py` uses `GOOGLE_*` or `OPENAI_*` env and optional `--model`
+2) Choose model/provider → `optimize.py` prefers OpenRouter when `OPENROUTER_API_KEY` is set and the model looks like `provider/model` or `openrouter/*`; otherwise falls back to OpenAI (when model includes `gpt`) or Google
 3) Read & minimally edit TeX:
    - Optionally set header availability → `tex_edit.set_header_availability`
    - Extract `itemize` blocks → `tex_edit.extract_itemize_blocks`
@@ -164,6 +204,7 @@ streamlit run app/streamlit_app.py
 
 - `src/resume_ai/optimize.py`: Orchestrates the full pipeline.
 - `src/resume_ai/env.py`: Minimal `.env` loader.
+- `src/resume_ai/lm_openrouter.py`: OpenRouter client with explicit fallback ordering (defaults to Kimi K2).
 - `src/resume_ai/lm_google.py`: Gemini client (JSON‑aware).
 - `src/resume_ai/lm_openai.py`: GPT client (with certifi fallback).
 - `src/resume_ai/tex_edit.py`: TeX parsing and safe text transforms.

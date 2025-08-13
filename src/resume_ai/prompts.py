@@ -241,8 +241,9 @@ Transform the provided experience into 4-6 compelling, ATS-optimized resume bull
 2. **Check Word Count**: Each bullet 15-24 words
 3. **Confirm Keyword Integration**: 2-3 keywords naturally placed per bullet
 4. **Validate Metrics**: No fabricated numbers or placeholder brackets
-5. **Review Action Verbs**: Strong, specific verbs from approved categories
-6. **Ensure JSON Format**: Valid, parseable JSON structure
+5. **IMPORTANT**: NEVER LIE ABOUT TOOLS OR TECHNOLOGIES(e.g TensorFlow, PyTorch, Spark, etc.) YOU DID NOT USE. DO NOT ADD NEW TECHNOLOGIES THAT ARE NOT IN USER'S RESUME.
+6. **Review Action Verbs**: Strong, specific verbs from approved categories
+7. **Ensure JSON Format**: Valid, parseable JSON structure
 
 ### Quality Assurance:
 - Each bullet demonstrates clear business value

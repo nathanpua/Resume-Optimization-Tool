@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import streamlit as st
+import time
+import threading
 import shutil
 
 # Ensure local imports work when running `streamlit run app/streamlit_app.py`
@@ -20,9 +22,15 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from resume_ai.optimize import optimize_resume  # type: ignore  # noqa: E402
+from resume_ai.env import load_dotenv  # type: ignore  # noqa: E402
 from tools.jd_ingest import fetch_job_listing, derive_job_name  # type: ignore  # noqa: E402
 
 # ---------- Config ----------
+# Ensure .env at repo root is loaded for UI and backend
+try:
+    load_dotenv(str(REPO_ROOT / ".env"))
+except Exception:
+    pass
 MAX_RESUME_PDF_BYTES = int(os.getenv("UI_MAX_RESUME_PDF_MB", "15")) * 1024 * 1024
 MAX_TEX_BYTES = int(os.getenv("UI_MAX_TEX_MB", "1")) * 1024 * 1024
 MAX_JD_TEXT_CHARS = int(os.getenv("UI_MAX_JD_TEXT_CHARS", "20000"))
@@ -136,9 +144,10 @@ st.caption("Tailor your resume to a job description and view the results.")
 # Env guidance
 has_google = bool(os.getenv("GOOGLE_API_KEY"))
 has_openai = bool(os.getenv("OPENAI_API_KEY"))
-if not (has_google or has_openai):
+has_openrouter = bool(os.getenv("OPENROUTER_API_KEY"))
+if not (has_google or has_openai or has_openrouter):
     st.warning(
-        "No LLM API key detected. Set `GOOGLE_API_KEY` or `OPENAI_API_KEY` in `.env`.",
+        "No LLM API key detected. Set `OPENROUTER_API_KEY` (recommended) or `GOOGLE_API_KEY` or `OPENAI_API_KEY` in `.env`.",
         icon="⚠️",
     )
 
@@ -157,7 +166,18 @@ with st.form("inputs_form"):
     with st.expander("Advanced options", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
-            model = st.text_input("Model (optional)", placeholder="gemini-2.0-flash or gpt-4o-mini")
+            # Choose placeholder based on available provider; prefer OpenRouter defaults
+            if has_openrouter:
+                default_placeholder = os.getenv("OPENROUTER_MODEL") or "deepseek/deepseek-chat-v3-0324:free"
+            elif has_openai:
+                default_placeholder = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+            else:
+                default_placeholder = os.getenv("GOOGLE_MODEL") or "gemini-2.0-flash"
+            model = st.text_input(
+                "Model (optional)",
+                placeholder=default_placeholder,
+                help="Enter an OpenRouter model id (e.g., 'z-ai/glm-4.5v', 'openai/gpt-4o-mini') or leave blank to use defaults.",
+            )
             job_name_override = st.text_input("Job name (optional)")
         with c2:
             strategy = st.selectbox("Strategy", options=["conservative", "balanced", "bold"], index=1)
@@ -166,6 +186,10 @@ with st.form("inputs_form"):
             availability = st.text_input("Availability (optional)", placeholder="e.g., Available Jan–Jun 2026")
             reuse_existing = st.checkbox("Reuse existing outputs if present", value=False)
         tex_upload = st.file_uploader("Optional: Upload TeX template (.tex)", type=["tex"], accept_multiple_files=False, help="Max size 1 MB")
+        
+        # Show default routing note when OpenRouter is configured and model is not specified
+        if has_openrouter:
+            st.caption("OpenRouter is configured. If no model is provided, defaults to DeepSeek v3 free with Kimi K2 fallback.")
 
     submitted = st.form_submit_button("Optimize", type="primary")
 
@@ -247,33 +271,74 @@ if submitted:
             st.info("Existing folder found but no report.json; running optimization instead…")
 
     if result is None:
-        with st.spinner("Optimizing resume… this may take up to a minute"):
-            preferences = {
-                "strategy": strategy,
-                "pages": pages,
-                "availability": availability if availability else None,
-                "input_tex": str(tex_template_path) if tex_template_path else None,
-                "job_name": job_name,
-                "model": model if model else None,
-            }
+        preferences = {
+            "strategy": strategy,
+            "pages": pages,
+            "availability": availability if availability else None,
+            "input_tex": str(tex_template_path) if tex_template_path else None,
+            "job_name": job_name,
+            "model": model if model else None,
+        }
+
+        status_placeholder = st.empty()
+        start_time = time.time()
+        result_holder = {"result": None, "error": None}
+        stage_holder = {"stage": "starting"}
+
+        def _run_optimize():
             try:
-                result = optimize_resume(
+                result_holder["result"] = optimize_resume(
                     job_input_text=jd_text or "",
                     job_input_url=jd_url or "",
                     resume_path=str(resume_path) if resume_path else "",
                     out_dir=str(out_dir),
                     preferences=preferences,
+                    progress_callback=lambda s: stage_holder.__setitem__("stage", s),
                 )
-            except Exception as e:
-                st.error(f"Optimization failed: {e}")
-                st.stop()
+            except Exception as exc:
+                result_holder["error"] = exc
 
-            # Write report.json for consistency with CLI
-            try:
-                with open(out_dir / "report.json", "w", encoding="utf-8") as f:
-                    json.dump(result, f, indent=2)
-            except Exception:
-                pass
+        worker = threading.Thread(target=_run_optimize, daemon=True)
+        worker.start()
+        while worker.is_alive():
+            elapsed = time.time() - start_time
+            stage = stage_holder.get("stage", "working")
+            # Map internal codes to friendly labels
+            stage_map = {
+                "loading_env": "Loading environment",
+                "model_selected": "Selecting model",
+                "reading_base_tex": "Reading base template",
+                "fetching_jd": "Analyzing job description",
+                "parsing_resume_pdf": "Parsing resume PDF",
+                "extracting_keywords": "Extracting keywords",
+                "rewriting_bullets 0/0": "Rewriting bullets",
+                "rewriting_complete": "Rewriting complete",
+                "computing_coverage": "Computing coverage",
+                "writing_outputs": "Writing outputs",
+                "compiling_pdf": "Compiling PDF",
+                "done": "Done",
+            }
+            friendly = stage_map.get(stage, stage)
+            # If stage includes progress like "rewriting_bullets X/Y", show it directly
+            if stage.startswith("rewriting_bullets "):
+                friendly = stage.replace("rewriting_bullets", "Rewriting bullets")
+            status_placeholder.info(f"{friendly}… elapsed {int(elapsed)}s")
+            time.sleep(0.5)
+        worker.join()
+
+        if result_holder["error"] is not None:
+            st.error(f"Optimization failed: {result_holder['error']}")
+            st.stop()
+
+        result = result_holder["result"]
+        status_placeholder.success(f"Optimization completed in {time.time() - start_time:.1f}s")
+
+        # Write report.json for consistency with CLI
+        try:
+            with open(out_dir / "report.json", "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+        except Exception:
+            pass
 
     # Render results
     st.success(f"Done. Outputs in {out_dir}")
