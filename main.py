@@ -56,6 +56,13 @@ def main() -> int:
         default=None,
         help="Availability line to show in header; omitted if not provided",
     )
+    parser.add_argument(
+        "--rewrite-mode",
+        dest="rewrite_mode",
+        default="per_block",
+        choices=["per_block", "single_call"],
+        help="Bullet rewrite mode: optimize each section independently (per_block) or all sections in one call (single_call)",
+    )
 
     # Optional resume file path (not strictly required by optimizer)
     parser.add_argument("--resume", dest="resume_path", required=False, default="", help="Path to resume (PDF only)")
@@ -89,6 +96,7 @@ def main() -> int:
             "input_tex": args.input_tex,
             "job_name": job_folder_name,
             "model": args.model,
+            "rewrite_mode": args.rewrite_mode,
         },
     )
 

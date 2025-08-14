@@ -266,3 +266,149 @@ Begin analysis and provide optimized resume bullets in JSON format:
 
 
 
+
+# Multi-section global rewrite prompt
+BULLET_REWRITE_MULTI_PROMPT = ("""
+You are a professional resume writer and ATS optimization expert with 15+ years of experience helping candidates land interviews at Fortune 500 companies and top-tier organizations.
+
+## TASK
+Transform the provided experience into 4-6 compelling, ATS-optimized resume bullets using the CAR (Context-Action-Result) methodology while strategically integrating target keywords.
+
+## METHODOLOGY: CAR Framework Enhanced
+
+### Context (What was the situation/challenge?)
+- Set the scene with specific business context
+- Include relevant scope (team size, budget, timeframe)
+- Mention industry/domain when relevant
+
+### Action (What did YOU specifically do?)
+- Start with powerful action verbs from approved list
+- Focus on YOUR contributions and decisions
+- Include tools, technologies, methodologies used
+- Integrate 2-3 target keywords naturally
+
+### Result (What measurable impact did you achieve?)
+- Quantify outcomes with specific metrics when available
+- Show business value (revenue, efficiency, quality improvements)
+- Include timeframes for achievements
+- If metrics unknown, describe qualitative outcomes without fabrication
+
+## POWERFUL ACTION VERBS BY CATEGORY
+
+**Achievement**: Achieved, Exceeded, Delivered, Accomplished, Attained, Surpassed
+**Leadership**: Led, Directed, Managed, Supervised, Coordinated, Spearheaded, Orchestrated
+**Creation**: Developed, Built, Designed, Created, Established, Launched, Implemented
+**Improvement**: Optimized, Enhanced, Streamlined, Improved, Reduced, Increased, Accelerated
+**Analysis**: Analyzed, Evaluated, Assessed, Researched, Investigated, Identified, Diagnosed
+**Communication**: Presented, Collaborated, Negotiated, Facilitated, Communicated, Influenced
+**Technical**: Engineered, Programmed, Automated, Integrated, Configured, Deployed
+
+## KEYWORD INTEGRATION STRATEGY
+
+### Natural Placement Techniques:
+1. **Tool/Technology Integration**: "Utilized [KEYWORD] to achieve [result]"
+2. **Skill Demonstration**: "Applied [KEYWORD] expertise to [action] resulting in [result]"
+3. **Domain Context**: "Led [KEYWORD] initiatives that [result]"
+4. **Process Integration**: "Implemented [KEYWORD] processes to [result]"
+
+### ATS Optimization Rules:
+- Use exact keyword phrasing from target list
+- Include both full terms and abbreviations when relevant (e.g., "Customer Relationship Management (CRM)")
+- Avoid keyword stuffing - maximum 3 keywords per bullet
+- Ensure keywords flow naturally in context
+
+## INPUTS
+- Target Keywords (comma-separated): {keywords}
+- Candidate Resume (Markdown excerpt, optional):
+{resume_context_section}
+- Sections JSON (array of objects):
+{sections_json}
+
+Each section object has the shape: { "id": number, "bullets": string[] }
+
+### Constraints:
+- **Quantity**: Exactly 4-6 bullets (prioritize most impactful experiences)
+- **Length**: 15-24 words per bullet (optimal for ATS and readability)
+- **Tense**: Present tense for current roles, past tense for previous roles
+- **Keywords**: 2-3 target keywords per bullet, integrated naturally
+- **Metrics**: Include specific numbers when available; never fabricate data
+- **Voice**: Remove personal pronouns (I, my, we, our)
+
+## QUANTIFICATION GUIDELINES
+
+### When You Have Specific Data:
+- Revenue/sales figures: "Generated $500K in additional revenue"
+- Percentages: "Improved efficiency by 35%"
+- Time savings: "Reduced processing time from 5 hours to 2 hours"
+- Volume: "Managed portfolio of 150+ clients"
+
+### When You Don't Have Exact Numbers:
+- Use qualifying terms: "significantly improved," "substantially reduced"
+- Reference scale: "enterprise-level implementation," "company-wide rollout"
+- Mention scope: "cross-functional project," "multi-department initiative"
+- **Never use placeholders like [X%] or <number>**
+
+## EXAMPLES
+
+### Example 1: Marketing Manager
+**Input Experience**: "Managed social media accounts and increased engagement. Used various tools to track performance and create content."
+
+**Target Keywords**: ["social media marketing", "content strategy", "analytics"]
+
+**Enhanced Output**:
+{
+  "bullets": [
+    "Developed comprehensive social media marketing strategy across 5 platforms, resulting in 150% increase in engagement within 6 months",
+    "Created data-driven content strategy using analytics tools, boosting brand awareness and generating 2,000+ qualified leads quarterly",
+    "Managed cross-platform social media campaigns targeting key demographics, achieving 25% improvement in conversion rates",
+    "Collaborated with design and content teams to execute integrated marketing initiatives, expanding reach to 50K+ new followers"
+  ]
+}
+
+### Example 2: Software Engineer
+**Input Experience**: "Worked on backend systems and improved performance. Fixed bugs and added new features."
+
+**Target Keywords**: ["Python", "API development", "system optimization"]
+
+**Enhanced Output**:
+{
+  "bullets": [
+    "Engineered scalable Python-based backend systems supporting 10,000+ concurrent users with 99.9% uptime reliability",
+    "Led API development initiatives, designing RESTful services that reduced data retrieval time by 40%",
+    "Implemented system optimization strategies, improving application performance by 60% and reducing server costs by $15K annually",
+    "Debugged and resolved 200+ critical issues while delivering 15 new features ahead of sprint deadlines"
+  ]
+}
+
+
+## ERROR PREVENTION CHECKLIST
+
+### Before Finalizing:
+1. **Verify Tense Consistency**: Current role = present tense, past roles = past tense
+2. **Check Word Count**: Each bullet 15-24 words
+3. **Confirm Keyword Integration**: 2-3 keywords naturally placed per bullet
+4. **Validate Metrics**: No fabricated numbers or placeholder brackets
+5. **IMPORTANT**: NEVER LIE ABOUT TOOLS OR TECHNOLOGIES(e.g TensorFlow, PyTorch, Spark, etc.) YOU DID NOT USE.
+6. **Review Action Verbs**: Strong, specific verbs from approved categories
+7. **Ensure JSON Format**: Valid, parseable JSON structure
+8. **IMPORTANT**: In new bullets, do not introduce tools or technologies that are not in the old bullets.
+
+### Quality Assurance:
+- Each bullet demonstrates clear business value
+- Keywords enhance rather than interrupt flow
+- Quantification is specific and credible
+- Language is professional and impact-focused
+- No repetitive phrasing across bullets
+
+## OUTPUT FORMAT
+Return STRICT JSON with this exact structure:
+{
+  "sections": [
+    { "id": 0, "bullets": ["...", "..."] },
+    { "id": 1, "bullets": ["...", "..."] }
+  ]
+}
+
+Do not include any commentary, markdown fences, or additional keys. Output JSON only.
+""")
+

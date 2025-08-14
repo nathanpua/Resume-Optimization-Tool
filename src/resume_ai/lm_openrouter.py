@@ -355,3 +355,76 @@ class OpenRouterClient:
         prompt = self._render_prompt(prompts.SUMMARY_PROMPT, role=role or "", company=company or "", keywords=", ".join(keywords or []))
         text = self._call(prompt)
         return text.strip() if text else ""
+
+    def rewrite_bullets_multi(
+        self,
+        sections: List[Dict[str, Any]],
+        target_keywords: List[str],
+        resume_markdown: str | None = None,
+    ) -> Dict[int, List[str]]:
+        """Rewrite bullets for multiple sections in a single call.
+
+        Returns a mapping of section id -> bullets. On any parsing failure, returns {}.
+        """
+        try:
+            sections_json = json.dumps(sections, ensure_ascii=False)
+            kw = ", ".join(target_keywords or [])
+        except Exception:
+            sections_json = "[]"
+            kw = ""
+
+        resume_context_section = ""
+        if isinstance(resume_markdown, str) and resume_markdown.strip():
+            snippet = resume_markdown.strip()
+            if len(snippet) > 5000:
+                snippet = snippet[:5000]
+            resume_context_section = snippet
+
+        prompt = self._render_prompt(
+            prompts.BULLET_REWRITE_MULTI_PROMPT,
+            keywords=kw,
+            resume_context_section=resume_context_section,
+            sections_json=sections_json,
+        )
+        # Allow larger JSON responses when configured
+        original_max = self.max_tokens_json
+        try:
+            # No-op if env not set; caller may raise this via env to 1200–2000
+            self.max_tokens_json = int(os.getenv("OPENROUTER_MAX_TOKENS_JSON", str(self.max_tokens_json)))
+        except Exception:
+            pass
+
+        text = self._call_json(prompt) or self._call(prompt)
+        # Restore previous token cap
+        self.max_tokens_json = original_max
+
+        def _parse(text_in: str) -> Dict[int, List[str]]:
+            try:
+                data = json.loads(text_in)
+            except Exception:
+                json_block = self._extract_json_block(text_in)
+                try:
+                    data = json.loads(json_block) if json_block else {}
+                except Exception:
+                    data = {}
+            out: Dict[int, List[str]] = {}
+            if isinstance(data, dict):
+                arr = data.get("sections")
+                if isinstance(arr, list):
+                    for it in arr:
+                        try:
+                            sid = int(it.get("id"))  # type: ignore[arg-type]
+                            bl = it.get("bullets", [])
+                            if isinstance(bl, list):
+                                cleaned = [str(b).strip() for b in bl if str(b).strip()]
+                                out[sid] = cleaned
+                        except Exception:
+                            continue
+            return out
+
+        mapping = _parse(text)
+        if not mapping:
+            self.last_status = self.last_status or "error"
+            if not self.last_error:
+                self.last_error = "rewrite_bullets_multi: empty or invalid JSON response"
+        return mapping

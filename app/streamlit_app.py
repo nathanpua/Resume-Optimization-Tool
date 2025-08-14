@@ -175,6 +175,12 @@ with st.form("inputs_form"):
         with c2:
             strategy = st.selectbox("Strategy", options=["conservative", "balanced", "bold"], index=1)
             pages = st.selectbox("Pages", options=["auto", "one", "two"], index=0)
+            rewrite_mode = st.selectbox(
+                "Rewrite mode",
+                options=["per_block", "single_call"],
+                index=0,
+                help="Single call reduces repetition by optimizing all sections together; per-block is more conservative.",
+            )
         with c3:
             availability = st.text_input("Availability (optional)", placeholder="e.g., Available Jan–Jun 2026")
             reuse_existing = st.checkbox("Reuse existing outputs if present", value=False)
@@ -271,6 +277,7 @@ if submitted:
             "input_tex": str(tex_template_path) if tex_template_path else None,
             "job_name": job_name,
             "model": model if model else None,
+            "rewrite_mode": rewrite_mode,
         }
 
         status_placeholder = st.empty()

@@ -6,6 +6,12 @@
 # Generated outputs (resumes, PDFs, reports)
 out/
 USAGE.md
+prd/
+.serena/
+.cursor/
+.pytest_cache/
+/inputs
+
 
 # Root-level resume files
 resume.*

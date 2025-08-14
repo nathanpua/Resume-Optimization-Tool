@@ -21,6 +21,13 @@ def main():
     parser.add_argument("--strategy", dest="strategy", default="balanced", choices=["conservative", "balanced", "bold"], help="Optimization strategy")
     parser.add_argument("--pages", dest="pages", default="auto", choices=["auto", "one", "two"], help="Target page count policy")
     parser.add_argument("--availability", dest="availability", default=None, help="Availability line to show in header; omitted if not provided")
+    parser.add_argument(
+        "--rewrite-mode",
+        dest="rewrite_mode",
+        default="per_block",
+        choices=["per_block", "single_call"],
+        help="Bullet rewrite mode: optimize each section independently (per_block) or all sections in one call (single_call)",
+    )
 
     args = parser.parse_args()
 
@@ -51,6 +58,7 @@ def main():
             "input_tex": args.input_tex,
             "job_name": job_name,
             "model": args.model,
+            "rewrite_mode": args.rewrite_mode,
         },
     )
 
